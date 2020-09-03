@@ -95,13 +95,16 @@ class Brain():
                 accuracy_vali_old = 0
                 total_vali = 0
                 total_step = 0
-                if pep_acc:
-                    pep_acc_dict = {}
+                self.topk = {3:[],5:[]}
+                
+                pep_acc_dict = {}
                 for pep in data.keys():
                     hidden = self.init_hidden(bs=1)
                     accuracy_pep = 0
-                    if pep_acc:
-                        pep_acc_dict[pep] = {"correct":0,"total":0}
+                    for key in self.topk.keys():
+                        self.topk[key].append(0)
+                
+                    pep_acc_dict[pep] = {"correct":0,"total":0}
                     for step, (inp, target) in enumerate(self.batches(data[pep]["warm"],train="warm")):
                         _, hidden = self.model(inp, hidden)
                     for step, (inp, target) in enumerate(self.batches(data[pep]["test"],train="test")):
@@ -116,8 +119,11 @@ class Brain():
                             else:
                                 guess = top_guesses.indices[0]
                             accuracy_pep += int(target[i])==int(guess)
-                            if pep_acc:
-                                pep_acc_dict[pep]['total'] += 1
+                        
+                            pep_acc_dict[pep]['total'] += 1
+                               
+                            for key in self.topk.keys():
+                                self.topk[key][-1]+= int(int(target[i]) in torch.topk(sm[i,0,:],key)[1])
                         
     
                         accuracy_vali_old +=  torch.sum(target==sm.argmax(dim=2))
@@ -125,8 +131,10 @@ class Brain():
                         total_vali += sm.shape[0]*sm.shape[1]
                         total_step += 1
                     accuracy_vali += accuracy_pep  
-                    if pep_acc:
-                        pep_acc_dict[pep]['correct'] += accuracy_pep
+                    for key in self.topk.keys():
+                        self.topk[key][-1]/=pep_acc_dict[pep]['total']
+                    
+                    pep_acc_dict[pep]['correct'] += accuracy_pep
                 print(f"Test loss: {loss_vali/total_step:4.3f}", end = " | ")
                 print(f"Test accu: {float(accuracy_vali)/total_vali:4.3f}", end = " | ")
                 print(f"Test accu old: {float(accuracy_vali_old)/total_vali:4.3f}", end = " | ")

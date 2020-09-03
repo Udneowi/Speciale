@@ -19,10 +19,10 @@ import copy
 #       paths           PyTorch tensor    A tensor of all the attributes reshaped to the batch size  dim = [6,len(data)//bs,bs]  
 def load_data(peps, bs=1,dat_type = "train",stop_t = 925):
     if stop_t == False:
-        stop_token = [[],[],[],[],[],[]]
+        stop_token = [[],[],[],[],[],[],[],[],[]]
     else:    
-        stop_token = [[stop_t],[2],[2],[7],[2],[855]]
-    paths = np.array([[],[],[],[],[],[]])
+        stop_token = [[stop_t],[2],[2],[7],[2],[859],[0],[0],[34278]]
+    paths = np.array([[],[],[],[],[],[],[],[],[]])
     for pep in peps: 
         try:
             data = np.load(f"Data/{pep}/prepared_data_{dat_type}.npy")
@@ -49,20 +49,20 @@ def load_data(peps, bs=1,dat_type = "train",stop_t = 925):
 #       stop_t          Integer           Stop token used inbetween path sequences. Default=17035
 #  output:
 #       paths           PyTorch tensor    A tensor of the type locations reshaped to the batch size, dim = [1,len(data)//bs,bs]  
-def load_data_W2V(peps,bs=1,dat_type = "train",stop_t = 17035):
+def load_data_W2V(peps,bs=1,dat_type = "train",stop_t=True,cut_off = 20):
     paths_W2V = []
     if stop_t == False:
         stop_token = []
     else:    
-        stop_token = stop_t
+        stop_token = cut_off*852-1
     for i,pep in enumerate(peps):
         try:
             data = np.load(f"Data/{pep}/prepared_data_{dat_type}.npy")
             data_path = data[0,:]
-            data_path[data_path>18]=19
-            data_path +=20*pep  #pep eller i ?
+            data_path[data_path>=cut_off]=cut_off   #data_path[data_path>18]=19
+            data_path +=cut_off*pep  #pep eller i ?
             #import pdb; pdb.set_trace()
-            paths_W2V = np.concatenate((paths_W2V,[stop_t],data_path))
+            paths_W2V = np.concatenate((paths_W2V,[stop_token],data_path))
         except FileNotFoundError:
             print(f"File {pep} not found")
             continue   
@@ -160,9 +160,9 @@ def save_model(state_dict,accuracy,shuffle_dict=None):
         
         
 # Loads the training and test set given users.
-def load_train_test_set(peps,bs=1):
+def load_train_test_set(peps,bs=1,cut_off = 20):
     dat_train = load_data(peps,bs,dat_type="train_relabeled")
-    dat_train_w2v = load_data_W2V(peps,bs,dat_type="train_relabeled")
+    dat_train_w2v = load_data_W2V(peps,bs,dat_type="train_relabeled",cut_off=cut_off)
     dat_train_both = torch.cat((dat_train,dat_train_w2v.reshape(1,-1,bs)),0)
     
     #Loads warms up data and actual test data
@@ -170,9 +170,26 @@ def load_train_test_set(peps,bs=1):
     for pep in peps:
         dat_t = load_data([pep],bs = 1, dat_type="test_relabeled")
         dat_w = load_data([pep],bs = 1, dat_type="train_relabeled")
-        dat_t_w2v = load_data_W2V([pep],bs = 1, dat_type="test_relabeled")
-        dat_w_w2v = load_data_W2V([pep],bs = 1, dat_type="train_relabeled")
+        dat_t_w2v = load_data_W2V([pep],bs = 1, dat_type="test_relabeled",cut_off=cut_off)
+        dat_w_w2v = load_data_W2V([pep],bs = 1, dat_type="train_relabeled",cut_off=cut_off)
         dat_t_both = torch.cat((dat_t,dat_t_w2v.reshape(1,-1,1)),0)
         dat_w_both = torch.cat((dat_w,dat_w_w2v.reshape(1,-1,1)),0)
         dat_test[pep] = {"warm":dat_w_both,"test":dat_t_both}
     return dat_train_both, dat_test
+
+
+def load_locations(peps):
+    location = np.zeros((859+1,100,2))
+    for i,pep in enumerate(peps):
+        try:
+            data = np.load(f"Data/{pep}/prepared_data_locations_relabeled.npy")
+            location[pep][:data.shape[0],:data.shape[1]] = data
+        except FileNotFoundError:
+            print(f"File {pep} not found")
+            continue   
+
+    # Reshapes the list into a matrix with the batch size. 
+    location = torch.tensor(location)
+    if torch.cuda.is_available():
+        location = location.cuda()
+    return location
